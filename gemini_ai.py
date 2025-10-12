@@ -14,7 +14,7 @@ class GeminiAI:
             raise ValueError("GEMINI_API_KEY not found in environment variables")
         
         genai.configure(api_key=GEMINI_API_KEY)
-        self.model = genai.GenerativeModel('gemini-pro')
+        self.model = genai.GenerativeModel('gemini-1.0-pro')
         
         # System prompt for customer support
         self.system_prompt = """You are a helpful AI customer support assistant for Unthinkable Solutions. 
