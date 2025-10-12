@@ -1,64 +1,94 @@
-from flask import Flask, request, jsonify
-from flask_cors import CORS
+import logging
 from datetime import datetime
+from flask import Flask, request, jsonify
+from flask_cors import CORS  # Make sure to import CORS
+
+# --- Project Imports ---
 from config import FLASK_DEBUG, FLASK_HOST, FLASK_PORT
 from database import init_database, get_session_history, save_session_history, clear_session_history
 from faq_search import FAQSearch
 from gemini_ai import GeminiAI
 
-# Initialize Flask app
+# --- Basic Logging Configuration ---
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# --- Flask App Initialization ---
 app = Flask(__name__)
-CORS(app)  # allow all origins for dev
 
-# Initialize components
-faq_search = FAQSearch()
-gemini_ai = GeminiAI()
+# --- Explicit CORS Configuration for Development ---
+# This is the key change. We are now explicitly telling the server to allow
+# POST requests with a Content-Type header from any origin. This is the
+# most common fix for issues where GET works but POST fails.
+CORS(app, resources={r"/*": {"origins": "*"}}, methods=["GET", "POST", "OPTIONS"], headers=["Content-Type"])
+logging.info("Explicit CORS policy enabled for development.")
 
-# Initialize database
-init_database()
+# --- Initialize Core Components ---
+try:
+    faq_search = FAQSearch()
+    gemini_ai = GeminiAI()
+    init_database()
+    logging.info("Core components initialized successfully.")
+except Exception as e:
+    logging.critical(f"FATAL: Failed to initialize core components: {e}", exc_info=True)
 
-# ----------------------------
-# Chat endpoint
-# ----------------------------
-@app.route('/chat', methods=['POST'])
+# ==============================================================================
+# API ENDPOINTS
+# ==============================================================================
+
+@app.route('/chat', methods=['POST', 'OPTIONS'])
 def chat():
+    # Handle preflight OPTIONS request from the browser
+    if request.method == 'OPTIONS':
+        return jsonify({'status': 'ok'}), 200
+
+    logging.info(f"Received POST request for /chat from {request.remote_addr}")
     try:
         data = request.get_json()
         if not data:
-            return jsonify({"error": "No JSON data provided"}), 400
+            logging.warning("Request failed: No JSON data.")
+            return jsonify({"error": "Invalid request: No JSON data provided"}), 400
 
         session_id = data.get('session_id')
         message = data.get('message')
-        if not session_id or not message:
-            return jsonify({"error": "session_id and message required"}), 400
 
+        if not session_id or not message:
+            logging.warning(f"Request failed: Missing fields. Data: {data}")
+            return jsonify({"error": "Invalid request: 'session_id' and 'message' are required"}), 400
+
+        logging.info(f"Processing chat for session_id: {session_id}")
         conversation_history = get_session_history(session_id) or []
 
-        # First check FAQ
-        faq_answer = faq_search.search_faq(message)
-        if faq_answer:
-            reply = faq_answer
-        else:
+        reply = faq_search.search_faq(message)
+        source = "FAQ"
+
+        if not reply:
+            logging.info("No FAQ match. Querying Gemini AI.")
             reply = gemini_ai.generate_response(message, conversation_history)
+            source = "Gemini AI"
+        else:
+            logging.info("Found FAQ match.")
 
-        conversation_history.append({
-            "user": message,
-            "assistant": reply,
-            "timestamp": datetime.now().isoformat()
-        })
+        new_entry = {
+            "user": message, "assistant": reply,
+            "source": source, "timestamp": datetime.now().isoformat()
+        }
+        conversation_history.append(new_entry)
         save_session_history(session_id, conversation_history)
+        logging.info(f"Saved history for session_id: {session_id}")
 
-        return jsonify({"reply": reply}), 200
+        return jsonify({"reply": reply, "source": source}), 200
 
     except Exception as e:
-        print("Error in chat:", e)
-        return jsonify({"error": "Internal server error"}), 500
+        logging.error(f"Error in /chat endpoint: {e}", exc_info=True)
+        return jsonify({"error": "Internal server error."}), 500
 
-# ----------------------------
-# Reset session
-# ----------------------------
-@app.route('/reset', methods=['POST'])
+
+@app.route('/reset', methods=['POST', 'OPTIONS'])
 def reset():
+    if request.method == 'OPTIONS':
+        return jsonify({'status': 'ok'}), 200
+        
+    logging.info(f"Received POST request for /reset from {request.remote_addr}")
     try:
         data = request.get_json()
         session_id = data.get('session_id')
@@ -66,66 +96,37 @@ def reset():
             return jsonify({"error": "session_id is required"}), 400
 
         clear_session_history(session_id)
-        return jsonify({"message": f"Session {session_id} reset successfully"}), 200
+        logging.info(f"Session '{session_id}' cleared.")
+        return jsonify({"message": f"Session {session_id} history cleared successfully"}), 200
     except Exception as e:
+        logging.error(f"Error in /reset endpoint: {e}", exc_info=True)
         return jsonify({"error": "Internal server error"}), 500
 
-# ----------------------------
-# Get session history
-# ----------------------------
-@app.route('/history/<session_id>', methods=['GET'])
-def history(session_id):
-    try:
-        history = get_session_history(session_id) or []
-        return jsonify(history), 200
-    except Exception as e:
-        return jsonify({"error": "Could not fetch session history"}), 500
 
-# ----------------------------
-# Health check
-# ----------------------------
 @app.route('/health', methods=['GET'])
 def health_check():
     try:
-        faq_count = len(faq_search.get_all_faqs())
-        gemini_available = gemini_ai.is_available()
-        return jsonify({
-            "status": "healthy",
-            "timestamp": datetime.now().isoformat(),
-            "faq_count": faq_count,
-            "gemini_available": gemini_available
-        }), 200
+        health_status = {
+            "status": "healthy", "timestamp": datetime.now().isoformat(),
+            "services": {
+                "faq_system": {"status": "ok", "faq_count": len(faq_search.get_all_faqs())},
+                "gemini_ai": {"status": "available" if gemini_ai.is_available() else "unavailable"}
+            }
+        }
+        return jsonify(health_status), 200
     except Exception as e:
+        logging.error(f"Health check failed: {e}", exc_info=True)
         return jsonify({"status": "unhealthy", "error": str(e)}), 500
 
-# ----------------------------
-# Get all FAQs
-# ----------------------------
-@app.route('/faqs', methods=['GET'])
-def get_faqs():
-    try:
-        return jsonify({"faqs": faq_search.get_all_faqs()}), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+# ==============================================================================
+# MAIN EXECUTION BLOCK
+# ==============================================================================
 
-# ----------------------------
-# Error handlers
-# ----------------------------
-@app.errorhandler(404)
-def not_found(error):
-    return jsonify({"error": "Endpoint not found"}), 404
-
-@app.errorhandler(405)
-def method_not_allowed(error):
-    return jsonify({"error": "Method not allowed"}), 405
-
-@app.errorhandler(500)
-def internal_error(error):
-    return jsonify({"error": "Internal server error"}), 500
-
-# ----------------------------
-# Run app
-# ----------------------------
 if __name__ == '__main__':
-    print("🤖 AI Customer Support Bot Backend Started")
+    logging.info("==========================================================")
+    logging.info("🤖 Starting AI Customer Support Bot Backend Server...")
+    logging.info(f"   URL: http://{FLASK_HOST}:{FLASK_PORT}")
+    logging.info("==========================================================")
     app.run(debug=FLASK_DEBUG, host=FLASK_HOST, port=FLASK_PORT)
+
+ 
