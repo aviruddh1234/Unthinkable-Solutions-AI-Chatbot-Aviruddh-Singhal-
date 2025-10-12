@@ -24,8 +24,7 @@ A complete AI Customer Support Bot system with a **Flask backend** and **Gradio 
 
 ## System Architecture
 
-scss
-Copy code
+```
       ┌───────────────┐
       │    User       │
       │ (Web Browser) │
@@ -47,15 +46,14 @@ Copy code
       └───────────────┘
               │
        Response to UI
-markdown
-Copy code
+```
 
-- **Flow:**  
-  1. User sends message through **Gradio UI**.  
-  2. Flask backend checks **FAQ first**.  
-  3. If no FAQ match, query goes to **Gemini AI**.  
-  4. Conversation is stored in **SQLite database** for context.  
-  5. Response is sent back to the frontend in real-time.
+**Flow:**  
+1. User sends message through **Gradio UI**.  
+2. Flask backend checks **FAQ first**.  
+3. If no FAQ match, query goes to **Gemini AI**.  
+4. Conversation is stored in **SQLite database** for context.  
+5. Response is sent back to the frontend in real-time.
 
 ---
 
@@ -70,38 +68,38 @@ Send a message and receive an AI response.
     "session_id": "user123",
     "message": "How do I reset my password?"
 }
-Response:
+```
 
-json
-Copy code
+**Response:**
+```json
 {
     "reply": "You can reset your password by clicking 'Forgot Password' on the login page and following the email instructions.",
     "source": "FAQ"
 }
-POST /reset
+```
+
+### POST `/reset`
 Clear conversation history for a session.
 
-Request:
-
-json
-Copy code
+**Request:**
+```json
 {
     "session_id": "user123"
 }
-Response:
+```
 
-json
-Copy code
+**Response:**
+```json
 {
     "message": "Session user123 history cleared successfully"
 }
-GET /health
+```
+
+### GET `/health`
 Health check endpoint.
 
-Response:
-
-json
-Copy code
+**Response:**
+```json
 {
     "status": "healthy",
     "timestamp": "2024-01-01T12:00:00",
@@ -115,48 +113,53 @@ Copy code
         }
     }
 }
-Installation & Setup
-Prerequisites
-Python 3.8+
+```
 
-Google Gemini API key
+---
 
-Quick Start
-Install dependencies
+## Installation & Setup
 
-bash
-Copy code
+### Prerequisites
+- Python 3.8+
+- Google Gemini API key
+
+### Quick Start
+
+1. **Install dependencies**
+```bash
 pip install -r requirements.txt
-Set up environment variables
+```
 
-Create a .env file in the root directory:
+2. **Set up environment variables**
 
-env
-Copy code
+Create a `.env` file in the root directory:
+```env
 GEMINI_API_KEY=your_gemini_api_key_here
-Run the application
+```
+
+3. **Run the application**
 
 Open two separate terminals:
 
-Backend server
-
-bash
-Copy code
+**Backend server:**
+```bash
 python app.py
-Frontend interface
+```
 
-bash
-Copy code
+**Frontend interface:**
+```bash
 python chatbot_frontend.py
-Access the application
+```
 
-Frontend: http://localhost:7860
+4. **Access the application**
+- Frontend: http://localhost:7860
+- Backend API: http://127.0.0.1:5000
 
-Backend API: http://127.0.0.1:5000
+---
 
-File Structure
-arduino
-Copy code
+## File Structure
+
+```
 .
 ├── .gitignore
 ├── README.md
@@ -169,36 +172,73 @@ Copy code
 ├── gemini_ai.py
 ├── requirements.txt
 └── sessions.db (auto-generated)
-How It Works
-FAQ Search First:
-When a user sends a message, the system first searches faq_dataset.csv for a relevant answer.
+```
 
-Gemini AI Fallback:
-If no suitable FAQ match is found, the query is passed to the Gemini AI to generate a dynamic response.
+---
 
-Session Management:
-All conversations are stored in an SQLite database (sessions.db), tracking the history for each unique session ID.
+## How It Works
 
-Context Awareness:
-The Gemini AI is provided with the recent conversation history to generate responses that are contextually aware.
+1. **FAQ Search First:**  
+   When a user sends a message, the system first searches `faq_dataset.csv` for a relevant answer.
 
-Database Schema
-sessions table in sessions.db:
+2. **Gemini AI Fallback:**  
+   If no suitable FAQ match is found, the query is passed to the Gemini AI to generate a dynamic response.
 
-Column	Type	Description
-id	INTEGER	Primary key, AUTOINCREMENT
-session_id	TEXT	Unique session identifier (UNIQUE)
-conversation_history	TEXT	JSON string of the conversation
-created_at	TIMESTAMP	Timestamp of session creation
-updated_at	TIMESTAMP	Timestamp of last interaction
+3. **Session Management:**  
+   All conversations are stored in an SQLite database (`sessions.db`), tracking the history for each unique session ID.
 
-FAQ Dataset Format
-faq_dataset.csv columns:
+4. **Context Awareness:**  
+   The Gemini AI is provided with the recent conversation history to generate responses that are contextually aware.
 
-question: Frequently asked question.
+---
 
-answer: Corresponding answer.
+## Database Schema
 
-category: Optional category for the FAQ.
+### `sessions` table in `sessions.db`:
 
-keywords: Optional space-separated keywords to improve search matching.
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | INTEGER | Primary key, AUTOINCREMENT |
+| `session_id` | TEXT | Unique session identifier (UNIQUE) |
+| `conversation_history` | TEXT | JSON string of the conversation |
+| `created_at` | TIMESTAMP | Timestamp of session creation |
+| `updated_at` | TIMESTAMP | Timestamp of last interaction |
+
+---
+
+## FAQ Dataset Format
+
+`faq_dataset.csv` columns:
+
+- **question**: Frequently asked question.
+- **answer**: Corresponding answer.
+- **category**: Optional category for the FAQ.
+- **keywords**: Optional space-separated keywords to improve search matching.
+
+---
+
+## Technologies Used
+
+- **Backend**: Flask, SQLite
+- **Frontend**: Gradio
+- **AI**: Google Gemini API
+- **Data Processing**: Pandas, CSV
+- **Environment Management**: python-dotenv
+
+---
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+---
+
+## License
+
+This project is open source and available under the MIT License.
+
+---
+
+## Support
+
+For issues, questions, or contributions, please open an issue on the project repository.
