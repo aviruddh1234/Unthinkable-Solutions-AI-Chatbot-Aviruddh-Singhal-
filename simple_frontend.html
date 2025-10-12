@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>AI Customer Support — Debuggable UI</title>
+<style>
+  :root{
+    --primary:#007bff; --bg:#f0f2f5; --card:#ffffff; --muted:#6c757d;
+  }
+  html,body{height:100%;margin:0;font-family:Inter,Segoe UI,system-ui,Arial;}
+  body{display:flex;align-items:center;justify-content:center;background:var(--bg);padding:20px}
+  .chat-card{width:420px;max-height:90vh;background:var(--card);border-radius:12px;box-shadow:0 6px 20px rgba(0,0,0,0.12);display:flex;flex-direction:column;overflow:hidden}
+  .header{padding:14px 16px;background:linear-gradient(90deg,var(--primary),#0056b3);color:#fff;font-weight:600;display:flex;align-items:center;justify-content:space-between}
+  .header .title{display:flex;gap:8px;align-items:center}
+  .status{font-size:12px;color:#fff;opacity:0.9}
+  .meta{padding:8px 12px;background:#f7f9fb;color:var(--muted);font-size:12px}
+  .messages{flex:1;padding:12px;overflow:auto;display:flex;flex-direction:column;gap:10px;background:#f8fafc}
+  .bubble{max-width:78%;padding:10px 14px;border-radius:16px;word-break:break-word;box-shadow:0 1px 0 rgba(0,0,0,0.02)}
+  .user{align-self:flex-end;background:var(--primary);color:#fff;border-bottom-right-radius:4px}
+  .bot{align-self:flex-start;background:#edf2f7;color:#111;border-bottom-left-radius:4px}
+  .input-row{display:flex;gap:8px;padding:10px;border-top:1px solid #e6e9ee;background:#fff}
+  .input{flex:1;padding:10px;border-radius:8px;border:1px solid #dfe6ef;font-size:14px}
+  .btn{background:var(--primary);color:#fff;padding:10px 14px;border-radius:8px;border:none;cursor:pointer}
+  .btn[disabled]{opacity:0.6;cursor:not-allowed}
+  .small{font-size:12px;color:var(--muted)}
+  .log{font-family:monospace;white-space:pre-wrap;background:#111;color:#fff;padding:8px;margin:8px;border-radius:6px;font-size:12px;display:none}
+  .error-dot{display:inline-block;width:10px;height:10px;background:#ff6b6b;border-radius:50%;margin-right:8px}
+  .loading{font-size:12px;color:var(--primary);padding:6px 12px;text-align:center;display:none}
+</style>
+</head>
+<body>
+
+<div class="chat-card" role="region" aria-label="AI Customer Support">
+  <div class="header">
+    <div class="title">🤖 <span>AI Customer Support</span></div>
+    <div class="status" id="status">Checking backend...</div>
+  </div>
+
+  <div class="meta small" id="meta">Backend: unknown • FAQs: - • Gemini: -</div>
+
+  <div class="messages" id="messages" aria-live="polite" aria-atomic="false"></div>
+
+  <div class="loading" id="loading">⏳ AI is thinking...</div>
+
+  <div class="input-row">
+    <input id="input" class="input" placeholder="Type your message..." autocomplete="off" />
+    <button id="sendBtn" class="btn" type="button">Send</button>
+  </div>
+
+  <div class="meta small" style="display:flex;gap:8px;align-items:center;justify-content:space-between;padding:10px 12px 16px">
+    <div><button id="resetBtn" class="btn" style="background:#6c757d;padding:6px 10px">Reset</button></div>
+    <div class="small"><span id="debugHint">Console logs are helpful — open DevTools</span></div>
+  </div>
+
+  <!-- visible debug box for errors (toggle with display) -->
+  <div id="debugLog" class="log" aria-hidden="true"></div>
+</div>
+
+<script>
+/*
+  Robust frontend:
+  - Uses sessionStorage for per-tab session (keeps during tab open)
+  - DOES NOT load historical messages from backend on open (UI starts clean)
+  - Immediately renders user message to UI before awaiting response
+  - Preserves messages in in-memory array for the tab
+  - Strong console logging + visible debug box
+*/
+
+const BACKEND = "http://127.0.0.1:5000"; // change if backend elsewhere
+
+// session: per-tab
+let sessionId = sessionStorage.getItem("sessionId");
+if (!sessionId) {
+  sessionId = "sess_" + Math.random().toString(36).slice(2, 10);
+  sessionStorage.setItem("sessionId", sessionId);
+}
+console.log("Session ID:", sessionId);
+
+// in-memory message store (visible in devtools)
+const msgStore = [];
+
+// elements
+const messagesEl = document.getElementById("messages");
+const inputEl = document.getElementById("input");
+const sendBtn = document.getElementById("sendBtn");
+const resetBtn = document.getElementById("resetBtn");
+const statusEl = document.getElementById("status");
+const metaEl = document.getElementById("meta");
+const loadingEl = document.getElementById("loading");
+const debugEl = document.getElementById("debugLog");
+
+// helper: render message to DOM and push to store
+function renderMessage(text, who = "bot") {
+  try {
+    const div = document.createElement("div");
+    div.className = "bubble " + (who === "user" ? "user" : "bot");
+    div.textContent = text;
+    messagesEl.appendChild(div);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    msgStore.push({ who, text, t: new Date().toISOString() });
+    console.log("Rendered", who, ":", text);
+  } catch (err) {
+    console.error("renderMessage error", err);
+    showDebug("renderMessage error: " + err.toString());
+  }
+}
+
+// show debug in UI (also console.log)
+function showDebug(txt) {
+  debugEl.style.display = "block";
+  debugEl.textContent += txt + "\n";
+  console.log("DEBUG:", txt);
+}
+
+// hide debug
+function clearDebug() {
+  debugEl.style.display = "none";
+  debugEl.textContent = "";
+}
+
+// set status/meta
+function setStatus(text, isError = false) {
+  statusEl.textContent = text;
+  statusEl.style.opacity = isError ? "0.95" : "0.9";
+  if (isError) {
+    statusEl.style.background = "transparent";
+  }
+}
+
+// health check
+async function healthCheck() {
+  try {
+    const res = await fetch(`${BACKEND}/health`, { method: "GET" });
+    if (!res.ok) {
+      throw new Error(`health status ${res.status}`);
+    }
+    const j = await res.json();
+    metaEl.textContent = `Backend: ${j.status} • FAQs: ${j.faq_count} • Gemini: ${j.gemini_available ? "Available":"Not Available"}`;
+    setStatus("Online");
+    console.log("health:", j);
+  } catch (e) {
+    metaEl.textContent = "Backend: unreachable";
+    setStatus("Offline", true);
+    showDebug("Health check failed: " + e.toString());
+  }
+}
+
+// send message
+async function sendMessage() {
+  const text = inputEl.value.trim();
+  if (!text) return;
+  // render user message immediately
+  renderMessage(text, "user");
+  inputEl.value = "";
+  inputEl.focus();
+
+  // show loading
+  loadingEl.style.display = "block";
+  sendBtn.disabled = true;
+  clearDebug();
+
+  try {
+    // POST to /chat
+    const res = await fetch(`${BACKEND}/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: sessionId, message: text }),
+    });
+
+    // If non-200, show error text but keep UI messages
+    if (!res.ok) {
+      const textResp = await res.text().catch(() => "");
+      showDebug(`HTTP ${res.status} ${res.statusText} — body: ${textResp}`);
+      renderMessage("⚠️ Server error: " + res.statusText, "bot");
+      return;
+    }
+
+    // try parse JSON
+    let body;
+    try {
+      body = await res.json();
+    } catch (err) {
+      const raw = await res.text();
+      showDebug("Invalid JSON from /chat: " + raw);
+      renderMessage("⚠️ Invalid response from server", "bot");
+      return;
+    }
+
+    // expecting { reply: "..." }
+    if (body && body.reply) {
+      renderMessage(body.reply, "bot");
+    } else {
+      showDebug("Response missing .reply: " + JSON.stringify(body));
+      renderMessage("⚠️ No reply field returned by server", "bot");
+    }
+
+  } catch (err) {
+    showDebug("Fetch failed: " + err.toString());
+    renderMessage("❌ Connection error — cannot reach backend", "bot");
+  } finally {
+    loadingEl.style.display = "none";
+    sendBtn.disabled = false;
+  }
+}
+
+// reset session (UI only + backend clear optional)
+async function resetChat() {
+  // clear UI and in-memory store
+  messagesEl.innerHTML = "";
+  msgStore.length = 0;
+  // generate new ephemeral session for this tab (so backend won't return previous context)
+  sessionId = "sess_" + Math.random().toString(36).slice(2, 9);
+  sessionStorage.setItem("sessionId", sessionId);
+  renderMessage("👋 Hello! I'm your AI Assistant. How can I help?", "bot");
+  clearDebug();
+  // optionally call backend /reset to clear server-side logs if desired
+  try {
+    await fetch(`${BACKEND}/reset`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ session_id: sessionId })
+    });
+  } catch (e) {
+    // not fatal — just show debug
+    showDebug("Reset call failed (could be normal): " + e.toString());
+  }
+}
+
+// helpers to prevent form/submit reloads
+sendBtn.addEventListener("click", (e) => { e.preventDefault(); sendMessage(); });
+inputEl.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); sendMessage(); } });
+resetBtn.addEventListener("click", (e) => { e.preventDefault(); resetChat(); });
+
+// initial UI state: clear UI and show welcome message (no history loaded)
+window.addEventListener("load", async () => {
+  messagesEl.innerHTML = "";
+  renderMessage("👋 Hello! I'm your AI Assistant. How can I help?", "bot");
+  await healthCheck();
+  // open console message to help debugging
+  console.log("Frontend ready. Session:", sessionId);
+});
+</script>
+</body>
+</html>

@@ -1,3 +1,46 @@
+# =============================================================================
+# AI Customer Support Bot - Project Specific
+# =============================================================================
+
+# Environment variables (contains sensitive API keys)
+.env
+.env.local
+.env.production
+.env.staging
+
+# Database files
+sessions.db
+sessions.db-journal
+test_sessions.db
+test_sessions.db-journal
+*.db
+*.db-journal
+
+# Log files
+*.log
+chatbot.log
+logs/
+log/
+
+# Temporary files
+*.tmp
+*.temp
+temp/
+tmp/
+
+# Cache files
+.cache/
+cache/
+
+# Backup files
+*.bak
+*.backup
+backup/
+
+# =============================================================================
+# Python Standard Ignores
+# =============================================================================
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
