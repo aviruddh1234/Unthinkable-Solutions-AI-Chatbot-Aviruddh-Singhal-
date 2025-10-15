@@ -2,6 +2,7 @@
 
 A complete AI Customer Support Bot system with a **Flask backend** and **Gradio frontend** that integrates FAQ search with **Google's Gemini AI**.
 
+Demo Video Link (Please click on the below thumbnail to access the video):
 [![AI Chatbot Demo Video](https://github.com/aviruddh1234/Unthinkable-Solutions-AI-Chatbot-Aviruddh-Singhal-/blob/main/Screenshot%202025-10-15%20223128.png)](https://youtu.be/9rOnFZN0Oak)
 
 ---
