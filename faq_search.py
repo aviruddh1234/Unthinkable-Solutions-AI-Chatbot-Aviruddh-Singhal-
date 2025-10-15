@@ -80,7 +80,7 @@ class FAQSearch:
                 best_match = row
         
         # Return answer if we found a good match (score > 1)
-        if best_match is not None and best_score > 40:
+        if best_match is not None and best_score > 60:
             return best_match['answer']
         
         return ""
