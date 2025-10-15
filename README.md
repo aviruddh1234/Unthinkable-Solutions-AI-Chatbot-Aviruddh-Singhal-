@@ -1,4 +1,4 @@
-# AI Customer Support Bot for Unthinkable Solutions 
+# AI Customer Support Bot
 
 A complete AI Customer Support Bot system with a **Flask backend** and **Gradio frontend** that integrates FAQ search with **Google's Gemini AI**.
 
