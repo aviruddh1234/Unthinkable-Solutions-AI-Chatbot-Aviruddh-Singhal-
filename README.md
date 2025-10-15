@@ -2,7 +2,8 @@
 
 A complete AI Customer Support Bot system with a **Flask backend** and **Gradio frontend** that integrates FAQ search with **Google's Gemini AI**.
 
-Link to the Demo Video of the Application -> https://drive.google.com/file/d/1hKl26jnhrV_ByBp3BJDoxRogMr4Idn8J/view?usp=sharing
+Link to the Demo Video of the Application -> Drive Link: https://drive.google.com/file/d/1hKl26jnhrV_ByBp3BJDoxRogMr4Idn8J/view?usp=sharing
+                                             Youtube Link: https://youtu.be/9rOnFZN0Oak
 
 ---
 
